@@ -1,0 +1,75 @@
+# --------------------------------------------
+# 🌍 Multi-IP Feature Extraction Script
+# --------------------------------------------
+# Input: Filtered dataset (with IP column)
+# Output: New dataset with IP-based features
+# --------------------------------------------
+
+import pandas as pd
+import ipaddress
+import socket
+from google.colab import files
+from tqdm import tqdm  # progress bar
+
+# Step 1: Upload filtered dataset
+uploaded = files.upload() #upload AIORI_portal_data_filtered
+filename = list(uploaded.keys())[0]
+
+# Step 2: Load dataset
+df = pd.read_csv(filename)
+print("Original shape:", df.shape)
+
+# Step 3: Define function to extract IP-based features
+def extract_ip_features(ip_str):
+    try:
+        ip_obj = ipaddress.ip_address(ip_str)
+        octets = ip_str.split('.')
+        
+        # Basic octets
+        octet_1 = int(octets[0])
+        octet_2 = int(octets[1])
+        octet_3 = int(octets[2])
+        octet_4 = int(octets[3])
+        
+        # Private/Public
+        is_private = int(ip_obj.is_private)
+        
+        # IP Class
+        if 1 <= octet_1 <= 126:
+            ip_class = 'A'
+        elif 128 <= octet_1 <= 191:
+            ip_class = 'B'
+        elif 192 <= octet_1 <= 223:
+            ip_class = 'C'
+        elif 224 <= octet_1 <= 239:
+            ip_class = 'D'
+        else:
+            ip_class = 'E'
+        
+        # Reverse DNS lookup (skip timeout errors quickly)
+        try:
+            reverse_dns = socket.gethostbyaddr(ip_str)[0]
+        except:
+            reverse_dns = "N/A"
+        
+        return pd.Series([octet_1, octet_2, octet_3, octet_4, is_private, ip_class, reverse_dns])
+    
+    except:
+        # If invalid IP
+        return pd.Series([None, None, None, None, None, None, "N/A"])
+
+# Step 4: Apply to all IPs (with progress bar)
+tqdm.pandas()
+df[['octet_1','octet_2','octet_3','octet_4','is_private','ip_class','reverse_dns']] = df['IP'].progress_apply(extract_ip_features)
+
+# Step 5: Show summary
+print("✅ Feature extraction complete!")
+print("New shape:", df.shape)
+print(df.head(3))
+
+# Step 6: Save final dataset
+output_name = "AIORI_portal_features_extracted.csv"
+df.to_csv(output_name, index=False)
+
+files.download(output_name)
+print("\n📁 File saved and ready for download:", output_name)
