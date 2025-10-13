@@ -1,0 +1,53 @@
+import pandas as pd
+import numpy as np
+from google.colab import files
+
+# Step 1: Upload your dataset
+uploaded = files.upload() #upload AIORI_portal_data_cleaned
+filename = list(uploaded.keys())[0]
+
+# Step 2: Load the dataset
+df = pd.read_csv(filename)
+print("Original shape:", df.shape)
+
+# Step 3: Basic Cleaning (no duplicate removal)
+# Strip extra spaces from text columns
+for col in ['anchor', 'host_name', 'IP', 'location']:
+    df[col] = df[col].astype(str).str.strip()
+
+# Replace invalid text entries with NaN
+df.replace(['', ' ', 'NA', 'NaN', 'nan', 'None'], np.nan, inplace=True)
+
+# Drop rows with any missing critical data
+df = df.dropna(subset=['IP', 'avg_rtt', 'min_rtt', 'max_rtt', 'location'])
+
+# Step 4: Convert RTT columns to numeric safely
+rtt_cols = ['avg_rtt', 'min_rtt', 'max_rtt']
+for col in rtt_cols:
+    df[col] = pd.to_numeric(df[col], errors='coerce')
+
+# Remove rows with negative or zero RTT (invalid readings)
+for col in rtt_cols:
+    df = df[df[col] > 0]
+
+# Step 5: Outlier / Spike Removal using IQR (mild filtering)
+for col in rtt_cols:
+    Q1 = df[col].quantile(0.25)
+    Q3 = df[col].quantile(0.75)
+    IQR = Q3 - Q1
+    lower = Q1 - 1.5 * IQR
+    upper = Q3 + 1.5 * IQR
+    df = df[(df[col] >= lower) & (df[col] <= upper)]
+
+# Step 6: Reset index
+df = df.reset_index(drop=True)
+
+print("✅ Cleaned and filtered successfully!")
+print("New shape:", df.shape)
+print("\nRTT Summary after filtering:")
+print(df[rtt_cols].describe())
+
+# Step 7: Save and download
+output_name = "AIORI_portal_data_filtered.csv"
+df.to_csv(output_name, index=False)
+files.download(output_name)
