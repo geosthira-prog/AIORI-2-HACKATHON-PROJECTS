@@ -1,0 +1,28 @@
+import pandas as pd
+from google.colab import files
+
+# Step 1: Upload your dataset
+uploaded = files.upload() #upload AIORI_portal_data_synthesized.csv
+filename = list(uploaded.keys())[0]
+
+# Step 2: Load the dataset
+df = pd.read_csv(filename)
+print("Original shape:", df.shape)
+
+# Step 3: Clean 'city' or 'location' column (change name if needed)
+# Replace spaces, NaNs, or empty strings with NaN
+df['location'] = df['location'].replace(['', ' ', '  ', 'NA', 'NaN', 'nan'], pd.NA)
+
+# Drop all rows where 'location' is NaN or missing
+df = df.dropna(subset=['location'])
+
+# Step 4: Reset index after dropping
+df = df.reset_index(drop=True)
+
+print("Cleaned shape:", df.shape)
+print("✅ Removed rows with missing/invalid city values successfully!")
+
+# Step 5: Save and download the cleaned file
+output_name = "AIORI_portal_data_cleaned.csv"
+df.to_csv(output_name, index=False)
+files.download(output_name)
