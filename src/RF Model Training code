@@ -1,0 +1,75 @@
+# ===============================
+# IMPORT LIBRARIES
+# ===============================
+import pandas as pd
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import LabelEncoder
+import joblib
+import ipaddress
+from google.colab import files
+
+# ===============================
+# STEP 1: UPLOAD CSV
+# ===============================
+uploaded = files.upload() #upload AIORI_portal_features_extracted.csv
+file_name = list(uploaded.keys())[0]
+df = pd.read_csv(file_name)
+print("✅ Data Loaded. First 5 rows:")
+print(df.head())
+
+# ===============================
+# STEP 2: FEATURE ENGINEERING
+# ===============================
+# Derived features
+df['rtt_range'] = df['max_rtt'] - df['min_rtt']
+df['rtt_ratio'] = df['avg_rtt'] / df['max_rtt'].replace(0,1)  # avoid divide by zero
+
+# Encode categorical features
+categorical_cols = ['is_private', 'ip_class', 'reverse_dns']
+label_encoders = {}
+for col in categorical_cols:
+    le = LabelEncoder()
+    df[col] = le.fit_transform(df[col])
+    label_encoders[col] = le
+
+# Selected features for best performance
+feature_cols = [
+    'avg_rtt','min_rtt','max_rtt','rtt_range','rtt_ratio',
+    'octet_1','octet_2','octet_3','octet_4',
+    'is_private','ip_class','reverse_dns'
+]
+
+X = df[feature_cols]
+y = df['location']
+
+# ===============================
+# STEP 3: TRAIN RANDOM FOREST
+# ===============================
+model = RandomForestClassifier(
+    n_estimators=600,
+    max_depth=None,
+    class_weight='balanced',
+    random_state=42,
+    n_jobs=-1
+)
+model.fit(X, y)
+
+# Save X_train mean/mode for unseen IP feature generation
+model.X_train_mean_ = X
+
+# ===============================
+# STEP 4: EVALUATE MODEL
+# ===============================
+y_pred = model.predict(X)
+accuracy = (y_pred == y).mean()
+print(f"✅ Training Accuracy: {accuracy*100:.2f}% (Confidence for existing IPs should now be higher)")
+
+# ===============================
+# STEP 5: SAVE MODEL
+# ===============================
+joblib.dump(model, 'trained_model_RF.pkl') 
+print("💾 Model saved as trained_model_RF.pkl") 
+
+#To save the model to your Colab drive
+from google.colab import drive
+drive.mount('/content/drive/MyDrive/Colab Notebooks')
