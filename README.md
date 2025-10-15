@@ -1,6 +1,6 @@
 # 🌍 Supervised Learning for City-Level IP Geolocation  
 
-### 🧠 Problem Statement 15 | AIORI Hackathon 2025  
+### 🧠 Problem Statement 15 | AIORI-2 Remote Hackathon 2025  
 
 ---
 
