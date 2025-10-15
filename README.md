@@ -42,30 +42,53 @@ We built an **interactive Gradio dashboard** for live prediction — users can e
 
 ---
 
-## 🗂️ Repository Structure  
+## 📦 Project Directory Structure
 
-📦 GEOSTHIRA_IP_GEOLOCATION/
-│
-├── 📁 Datasets/
-│   ├── AIORI_portal_data.csv
-│   ├── AIORI_portal_data_cleaned.csv
-│   ├── AIORI_portal_data_filtered.csv
-│   ├── AIORI_portal_data_synthesized.csv
-│   └── AIORI_portal_features_extracted.csv
-│
-├── 📁 src/
-│   ├── Data_Cleaning.ipynb
-│   ├── Data_Filtering.ipynb
-│   ├── Data_Synthesizing.ipynb
-│   ├── Feature_Extraction.ipynb
-│   ├── RandomForest_Training.ipynb
-│   └── Model_Prediction_and_Dashboard.ipynb
-│
-├── 📄 Geosthira_report_Oct2nd.pdf
-├── 📄 Geosthira_updated_report_Oct15th.pdf
-├── 📄 Proposed-structure-hackathon.pdf
-└── 📄 README.md
+GEOSTHIRA_IP_GEOLOCATION/  
+│  
+├── 📁 Datasets/  
+│   ├── AIORI_portal_data.csv  
+│   ├── AIORI_portal_data_cleaned.csv  
+│   ├── AIORI_portal_data_filtered.csv  
+│   ├── AIORI_portal_data_synthesized.csv  
+│   └── AIORI_portal_features_extracted.csv  
+│  
+├── 📁 src/  
+│   ├── Data_Cleaning.ipynb  
+│   ├── Data_Filtering.ipynb  
+│   ├── Data_Synthesizing.ipynb  
+│   ├── Feature_Extraction.ipynb  
+│   ├── RandomForest_Training.ipynb  
+│   └── Model_Prediction_and_Dashboard.ipynb  
+│  
+├── 📄 Geosthira_report_Oct2nd.pdf  
+├── 📄 Geosthira_updated_report_Oct15th.pdf  
+├── 📄 Proposed-structure-hackathon.pdf  
+└── 📄 README.md  
 
+## 📦 Project Directory Structure
+
+GEOSTHIRA_IP_GEOLOCATION/  
+│  
+├── 📁 Datasets/  
+│   ├── AIORI_portal_data.csv  
+│   ├── AIORI_portal_data_cleaned.csv  
+│   ├── AIORI_portal_data_filtered.csv  
+│   ├── AIORI_portal_data_synthesized.csv  
+│   └── AIORI_portal_features_extracted.csv  
+│  
+├── 📁 src/  
+│   ├── Data_Cleaning.ipynb  
+│   ├── Data_Filtering.ipynb  
+│   ├── Data_Synthesizing.ipynb  
+│   ├── Feature_Extraction.ipynb  
+│   ├── RandomForest_Training.ipynb  
+│   └── Model_Prediction_and_Dashboard.ipynb  
+│  
+├── 📄 Geosthira_report_Oct2nd.pdf  
+├── 📄 Geosthira_updated_report_Oct15th.pdf  
+├── 📄 Proposed-structure-hackathon.pdf  
+└── 📄 README.md  
 
 ---
 
