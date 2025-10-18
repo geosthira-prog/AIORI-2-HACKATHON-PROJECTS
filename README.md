@@ -16,33 +16,33 @@
 
 ## 🚧 Project Status  
 
-> **Note:** This project is currently in progress.  
-> The results and models shared here are **preliminary** — we are actively improving **model confidence, unseen IP prediction accuracy**, and **feature optimization**.  
-> Future updates will include new datasets, retrained models, and confidence calibration reports.
+> **Note:** This project is currently under development.  
+> The models and results shown are **preliminary**, and we are actively enhancing **prediction confidence**, **accuracy for unseen IPs**, and **feature optimization**.  
+> Future updates will include improved datasets, retrained models, and calibrated confidence reports.
 
 ---
 
 ## 📌 Project Overview  
 
-The project **“Supervised Learning for City-Level IP Geolocation”** aims to predict the **city-level location** of a given IP address using **supervised machine learning techniques**.  
-Our model learns patterns from IP octets, RTT statistics, DNS info, and network-related features to classify IPs by city.  
+The project **“Supervised Learning for City-Level IP Geolocation”** aims to predict the **city-level location** of a given IP address using **machine learning**.  
+Our model learns from features such as **IP octets**, **RTT statistics**, **DNS information**, and **network-related metrics** to classify IPs by city.  
 
-We built an **interactive Gradio dashboard** for live prediction — users can enter IPs (single, multiple, or via CSV) and view the predicted city and model confidence instantly.
+We built an **interactive Gradio dashboard** that allows users to input IPs (single, multiple, or via CSV upload) and instantly view the **predicted city** and **confidence score**.
 
 ---
 
 ## 🚀 Key Features  
 
-✅ **Complete ML Pipeline** – from raw dataset → cleaned → synthesized → trained model  
-✅ **Random Forest Classifier** for robust and interpretable predictions  
-✅ **Feature Engineering** – RTT stats, octets, private/public flag, IP class  
-✅ **Gradio Dashboard** – real-time predictions and confidence visualization  
-✅ **Handles Private IPs** gracefully (“Private IP: Location cannot be determined”)  
-✅ **Modular Codebase** – easy to retrain or extend with new features  
+✅ **End-to-End ML Pipeline** – from raw data → cleaned → synthesized → trained model  
+✅ **Random Forest Classifier** for accurate, interpretable predictions  
+✅ **Feature Engineering** – RTT stats, octets, IP class, and DNS-based features  
+✅ **Gradio Dashboard** – interactive, real-time predictions with confidence visualization  
+✅ **Smart Handling of Private IPs** – gracefully reports “Private IP: Location cannot be determined”  
+✅ **Modular Structure** – retrainable with new features and datasets  
 
 ---
 
-## 📦 Project Directory Structure
+## 📦 Project Directory Structure  
 
 GEOSTHIRA_IP_GEOLOCATION/  
 │  
@@ -62,7 +62,8 @@ GEOSTHIRA_IP_GEOLOCATION/
 │   └── Model_Prediction_and_Dashboard.ipynb  
 │  
 ├── 📄 Geosthira_report_Oct2nd.pdf  
-├── 📄 Geosthira_updated_report_Oct15th.pdf  
+├── 📄 Geosthira_updated_report_Oct15th.pdf
+├── 📄 Geosthira_Updated_report.pdf  
 ├── 📄 Proposed-structure-hackathon.pdf  
 └── 📄 README.md  
 
