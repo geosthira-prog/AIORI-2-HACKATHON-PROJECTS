@@ -1,0 +1,254 @@
+from fastapi import FastAPI, Request, Form, UploadFile, File
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+import pandas as pd
+import ipaddress
+import hashlib
+import joblib
+import os
+import matplotlib.pyplot as plt 
+import io
+import base64
+from ipwhois import IPWhois
+import socket
+
+# ===============================
+# App & Templates
+# ===============================
+app = FastAPI()
+app.mount("/static", StaticFiles(directory="static"), name="static")
+templates = Jinja2Templates(directory="templates")
+
+# ===============================
+# Load ML model
+# ===============================
+model = joblib.load("trained_model_RF.pkl")
+model_features = getattr(model, 'feature_names_in_', [])
+
+# ===============================
+# Known Public DNS IPs
+# ===============================
+PUBLIC_DNS_IPS = {
+    "8.8.8.8": "Google Public DNS (Primary)",
+    "8.8.4.4": "Google Public DNS (Secondary)",
+    "1.1.1.1": "Cloudflare DNS (Primary)",
+    "1.0.0.1": "Cloudflare DNS (Secondary)",
+    "9.9.9.9": "Quad9 DNS",
+    "208.67.222.222": "OpenDNS (Cisco)",
+    "208.67.220.220": "OpenDNS (Cisco)"
+}
+
+# ===============================
+# User Authentication
+# ===============================
+USER_FILE = "users.csv"
+
+def hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
+
+def load_users():
+    if os.path.exists(USER_FILE):
+        return pd.read_csv(USER_FILE)
+    return pd.DataFrame(columns=["username", "password"])
+
+def save_user(username, password):
+    users = load_users()
+    if username in users["username"].values:
+        return False
+    new_user = pd.DataFrame([[username, hash_password(password)]], columns=["username", "password"])
+    users = pd.concat([users, new_user], ignore_index=True)
+    users.to_csv(USER_FILE, index=False)
+    return True
+
+def verify_login(username, password):
+    users = load_users()
+    hashed = hash_password(password)
+    return ((users["username"] == username) & (users["password"] == hashed)).any()
+
+# ===============================
+# Helper Functions
+# ===============================
+def is_private_ip(ip_str):
+    try:
+        return ipaddress.ip_address(ip_str).is_private
+    except:
+        return False
+
+def is_public_dns_ip(ip_str):
+    return ip_str.strip() in PUBLIC_DNS_IPS
+
+def parse_ip(ip_str):
+    try:
+        parts = ip_str.split('.')
+        if len(parts) != 4:
+            return None
+        return [int(p) for p in parts]
+    except:
+        return None
+
+def extract_ip_features(ip_str, X_train=None):
+    octets = parse_ip(ip_str)
+    if not octets:
+        return None
+    first_octet = octets[0]
+    ip_class = 1 if first_octet <= 127 else 2 if first_octet <= 191 else 3 if first_octet <= 223 else 0
+    is_private = int(is_private_ip(ip_str))
+
+    features_dict = {
+        'avg_rtt': X_train['avg_rtt'].mean() if X_train is not None else 0,
+        'min_rtt': X_train['min_rtt'].mean() if X_train is not None else 0,
+        'max_rtt': X_train['max_rtt'].mean() if X_train is not None else 0,
+        'octet_1': octets[0],
+        'octet_2': octets[1],
+        'octet_3': octets[2],
+        'octet_4': octets[3],
+        'is_private': is_private,
+        'ip_class': ip_class,
+        'reverse_dns': X_train['reverse_dns'].mode()[0] if X_train is not None else 0
+    }
+
+    features = pd.DataFrame([features_dict])
+    for col in model_features:
+        if col not in features.columns:
+            features[col] = 0
+    return features[model_features]
+
+def get_whois_info(ip):
+    try:
+        obj = IPWhois(ip)
+        data = obj.lookup_rdap()
+        return {
+            "country": data.get("country", "Unknown"),
+            "asn_description": data.get("asn_description", "N/A"),
+            "asn": data.get("asn", "N/A"),
+            "org": data.get("network", {}).get("name", "N/A"),
+        }
+    except:
+        return {
+            "country": "Unknown",
+            "asn_description": "N/A",
+            "asn": "N/A",
+            "org": "N/A",
+        }
+
+def compute_confidence(predicted_city, whois_country):
+    if whois_country == "IN":
+        return "High"
+    elif whois_country == "Unknown":
+        return "Medium"
+    else:
+        return "Low"
+
+def predict_ips(ip_list, X_train=None):
+    all_features = [extract_ip_features(ip, X_train) for ip in ip_list]
+    df_input = pd.concat(all_features, ignore_index=True)
+    results = []
+
+    for i, ip in enumerate(ip_list):
+        if is_private_ip(ip):
+            results.append({
+                'Input_IP': ip,
+                'City': "Private IP — Location cannot be found",
+                'Confidence (%)': 0.0,
+                'Error Bound (%)': 100.0,
+                'WHOIS': None
+            })
+        elif is_public_dns_ip(ip):
+            results.append({
+                'Input_IP': ip,
+                'City': f"{PUBLIC_DNS_IPS[ip]} — Global Service, No Location Prediction",
+                'Confidence (%)': 0.0,
+                'Error Bound (%)': 100.0,
+                'WHOIS': None
+            })
+        else:
+            pred = model.predict(df_input.iloc[[i]])[0]
+            confidence = model.predict_proba(df_input.iloc[[i]])[0].max() if hasattr(model, 'predict_proba') else 1.0
+            whois_data = get_whois_info(ip)
+            conf_level = compute_confidence(pred, whois_data["country"])
+            results.append({
+                'Input_IP': ip,
+                'City': pred,
+                'Confidence (%)': round(confidence * 100, 2),
+                'Error Bound (%)': round((1-confidence)*100, 2),
+                'WHOIS': whois_data,
+                'Confidence_Level': conf_level
+            })
+    return results
+
+def plot_confidence(results):
+    ips = [r['Input_IP'] for r in results]
+    confidence = [r['Confidence (%)'] for r in results]
+    fig, ax = plt.subplots(figsize=(6,4))
+    ax.bar(ips, confidence, color='royalblue')
+    ax.set_xlabel("IP")
+    ax.set_ylabel("Confidence (%)")
+    ax.set_title("Prediction Confidence per IP")
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+
+    buf = io.BytesIO()
+    plt.savefig(buf, format="png")
+    buf.seek(0)
+    img_base64 = base64.b64encode(buf.read()).decode('utf-8')
+    buf.close()
+    plt.close(fig)
+    return img_base64
+
+# ===============================
+# Routes
+# ===============================
+@app.get("/", response_class=HTMLResponse)
+def home(request: Request):
+    return templates.TemplateResponse("home.html", {"request": request})
+
+@app.get("/login", response_class=HTMLResponse)
+def login_page(request: Request):
+    return templates.TemplateResponse("login.html", {"request": request, "error": ""})
+
+@app.post("/login")
+def login(request: Request, username: str = Form(...), password: str = Form(...)):
+    if verify_login(username, password):
+        response = RedirectResponse("/dashboard", status_code=302)
+        response.set_cookie("user", username)
+        return response
+    return templates.TemplateResponse("login.html", {"request": request, "error": "Invalid username or password"})
+
+@app.get("/register", response_class=HTMLResponse)
+def register_page(request: Request):
+    return templates.TemplateResponse("register.html", {"request": request, "error": ""})
+
+@app.post("/register")
+def register(request: Request, username: str = Form(...), password: str = Form(...)):
+    if save_user(username, password):
+        return RedirectResponse("/login", status_code=302)
+    return templates.TemplateResponse("register.html", {"request": request, "error": "Username already exists"})
+
+@app.get("/dashboard", response_class=HTMLResponse)
+def dashboard(request: Request):
+    user = request.cookies.get("user")
+    if not user:
+        return RedirectResponse("/login")
+    return templates.TemplateResponse("dashboard.html", {"request": request, "user": user, "results": None, "plot": None})
+
+@app.post("/predict", response_class=HTMLResponse)
+async def predict(request: Request, ip_single: str = Form(""), ip_multiple: str = Form(""), csv_file: UploadFile = File(None)):
+    user = request.cookies.get("user")
+    if not user:
+        return RedirectResponse("/login")
+    
+    ip_list = []
+    if ip_single.strip():
+        ip_list.append(ip_single.strip())
+    elif ip_multiple.strip():
+        ip_list.extend([ip.strip() for ip in ip_multiple.split(",") if ip.strip()])
+    elif csv_file:
+        df = pd.read_csv(csv_file.file)
+        if 'IP' not in df.columns:
+            return templates.TemplateResponse("dashboard.html", {"request": request, "user": user, "results": None, "plot": None, "error": "CSV must have column 'IP'"})
+        ip_list.extend(df['IP'].astype(str).tolist())
+
+    results = predict_ips(ip_list)
+    plot_img = plot_confidence(results)
+    return templates.TemplateResponse("dashboard.html", {"request": request, "user": user, "results": results, "plot": plot_img})
