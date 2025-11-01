@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>GeoSthira IP Geolocator 🌍</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        /* ===== Similarity Score Bar Styling ===== */
+        .sim-bar {
+            width: 100px;
+            height: 10px;
+            border-radius: 5px;
+            background-color: #ddd;
+            margin: 5px auto;
+            overflow: hidden;
+        }
+        .sim-fill {
+            height: 100%;
+            border-radius: 5px;
+            transition: width 0.6s ease;
+        }
+        .sim-text {
+            font-size: 0.85rem;
+            color: #333;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <!-- ===== Header ===== -->
+    <header>
+        <div class="logo-container">
+            <img src="/static/logo.png" alt="GeoSthira Logo" class="logo">
+            <h1>GeoSthira IP Geolocator</h1>
+        </div>
+        <p class="subtitle">Predict your IP’s Indian city using our trained ML model</p>
+    </header>
+
+    <!-- ===== Main Section ===== -->
+    <main>
+        <form method="post" action="/predict" enctype="multipart/form-data" class="input-form">
+            <label>Single IP Address:</label>
+            <input type="text" name="ip_single" placeholder="e.g. 13.71.49.222">
+
+            <label>Multiple IPs (comma-separated):</label>
+            <textarea name="ip_multiple" placeholder="e.g. 13.71.49.222, 61.246.138.73"></textarea>
+
+            <label>Or Upload CSV (with ‘IP’ column):</label>
+            <input type="file" name="csv_file" accept=".csv">
+
+            <p class="note">🧠 WHOIS, IPAPI & Similarity calculations run automatically — no manual input needed!</p>
+
+            <button type="submit">Locate IP</button>
+        </form>
+
+        {% if error %}
+        <div class="error-box">{{ error }}</div>
+        {% endif %}
+
+        {% if results %}
+        <section class="results">
+            <h2>🔍 Results</h2>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>IP Address</th>
+                            <th>Predicted City / Message</th>
+                            <th>Confidence (%)</th>
+                            <th>Error Bound (%)</th>
+                            <th>WHOIS ASN</th>
+                            <th>WHOIS City</th>
+                            <th>WHOIS Country</th>
+                            <th>IPAPI City</th>
+                            <th>Nearest Cities (k-NN Support)</th>
+                            <th>Similarity Score</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for r in results %}
+                        <tr>
+                            <td>{{ r['IP'] }}</td>
+                            <td>{{ r['Predicted_City'] }}</td>
+                            <td>{{ r['Confidence (%)'] }}</td>
+                            <td>{{ r['Error Bound (%)'] }}</td>
+                            <td>{{ r['WHOIS_ASN'] or '-' }}</td>
+                            <td>{{ r['WHOIS_City'] or '-' }}</td>
+                            <td>{{ r['WHOIS_Country'] or '-' }}</td>
+                            <td>{{ r['IPAPI_City'] or '-' }}</td>
+                            <td>{{ r['Nearest_Cities'] or '-' }}</td>
+                            <td>
+                                {% set score = (r['Similarity_Score'] or '0').replace('%','') %}
+                                {% set score_val = score|float if score|float >= 0 else 0 %}
+                                {% if score_val >= 80 %}
+                                    {% set color = '#4caf50' %}
+                                {% elif score_val >= 50 %}
+                                    {% set color = '#ff9800' %}
+                                {% else %}
+                                    {% set color = '#f44336' %}
+                                {% endif %}
+                                <div class="sim-text">{{ r['Similarity_Score'] or '-' }}</div>
+                                <div class="sim-bar">
+                                    <div class="sim-fill" style="width:{{ score_val }}%; background-color:{{ color }};"></div>
+                                </div>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            {% if plot %}
+            <div class="plot-container">
+                <img src="data:image/png;base64,{{ plot }}" alt="Confidence Plot">
+            </div>
+            {% endif %}
+        </section>
+        {% endif %}
+    </main>
+
+    <!-- ===== Footer ===== -->
+    <footer>
+        <p>🌐 Team GeoSthira | For support: <a href="mailto:geosthira@gmail.com">geosthira@gmail.com</a></p>
+    </footer>
+</body>
+</html>
