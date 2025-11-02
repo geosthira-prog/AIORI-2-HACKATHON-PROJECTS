@@ -36,7 +36,7 @@ We built an **interactive Gradio dashboard** that allows users to input IPs (sin
 ✅ **End-to-End ML Pipeline** – from raw data → cleaned → synthesized → trained model  
 ✅ **Random Forest Classifier** for accurate, interpretable predictions  
 ✅ **Feature Engineering** – RTT stats, octets, IP class, and DNS-based features  
-✅ **Gradio Dashboard** – interactive, real-time predictions with confidence visualization  
+✅ **FastAPI Dashboard** – interactive, real-time predictions with confidence visualization  
 ✅ **Smart Handling of Private IPs** – gracefully reports “Private IP: Location cannot be determined”  
 ✅ **Modular Structure** – retrainable with new features and datasets  
 
@@ -64,6 +64,7 @@ GEOSTHIRA_IP_GEOLOCATION/
 ├── 📄 Geosthira_report_Oct2nd.pdf  
 ├── 📄 Geosthira_updated_report_Oct15th.pdf
 ├── 📄 Geosthira_Updated_report.pdf  
+├── 📄 Geosthira_report_nov2nd.pdf  
 ├── 📄 Proposed-structure-hackathon.pdf  
 └── 📄 README.md  
 
@@ -106,7 +107,7 @@ GEOSTHIRA_IP_GEOLOCATION/
 | 🧬 **Synthesizing**            | `Data_Synthesizing.ipynb`              | Balances city data and creates synthetic samples |
 | 🧠 **Feature Extraction**      | `Feature_Extraction.ipynb`             | Extracts IP structure, RTT, and network features |
 | 🌳 **Model Training**          | `RandomForest_Training.ipynb`          | Trains Random Forest model and saves `.pkl`      |
-| 🎛️ **Dashboard & Prediction** | `Model_Prediction_and_Dashboard.ipynb` | Gradio app for interactive predictions           |
+| 🎛️ **Dashboard & Prediction** | `Model_Prediction_and_Dashboard.ipynb` | FastAPI app for interactive predictions           |
 
 
 ## 2.Open in Google Colab or Jupyter Notebook
@@ -141,7 +142,7 @@ Future updates will include:
 - Python  
 - Pandas, NumPy  
 - Scikit-learn  
-- Gradio  
+- FastAPI 
 - Matplotlib  
 
 ---
