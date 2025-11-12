@@ -100,16 +100,6 @@ GEOSTHIRA_IP_GEOLOCATION/
    git clone https://github.com/geosthira-prog/AIORI-2-HACKATHON-PROJECTS.git
    cd AIORI-2-HACKATHON-PROJECTS
 
-| Stage                          | Notebook                               | Description                                      |
-| ------------------------------ | -------------------------------------- | ------------------------------------------------ |
-| 🧹 **Data Cleaning**           | `Data_Cleaning.ipynb`                  | Removes nulls, duplicates, and invalid IPs       |
-| 🔍 **Filtering**               | `Data_Filtering.ipynb`                 | Keeps only valid public IPs and relevant columns |
-| 🧬 **Synthesizing**            | `Data_Synthesizing.ipynb`              | Balances city data and creates synthetic samples |
-| 🧠 **Feature Extraction**      | `Feature_Extraction.ipynb`             | Extracts IP structure, RTT, and network features |
-| 🌳 **Model Training**          | `RandomForest_Training.ipynb`          | Trains Random Forest model and saves `.pkl`      |
-| 🎛️ **Dashboard & Prediction** | `Model_Prediction_and_Dashboard.ipynb` | FastAPI app for interactive predictions           |
-
-
 ## 2.Open in Google Colab or Jupyter Notebook
 
 ## 3.Run notebooks in sequence:
