@@ -48,7 +48,7 @@
             <label>Or Upload CSV (with ‘IP’ column):</label>
             <input type="file" name="csv_file" accept=".csv">
 
-            <p class="note">🧠 WHOIS, IPAPI & Similarity calculations run automatically — no manual input needed!</p>
+            <p class="note">💻 Smart automation connects WHOIS, IPAPI & AI for location accuracy! </p>
 
             <button type="submit">Locate IP</button>
         </form>
@@ -108,12 +108,6 @@
                     </tbody>
                 </table>
             </div>
-
-            {% if plot %}
-            <div class="plot-container">
-                <img src="data:image/png;base64,{{ plot }}" alt="Confidence Plot">
-            </div>
-            {% endif %}
         </section>
         {% endif %}
     </main>
