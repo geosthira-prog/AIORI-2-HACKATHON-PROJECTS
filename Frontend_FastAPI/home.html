@@ -5,24 +5,38 @@
     <title>GeoSthira IP Geolocator 🌍</title>
     <link rel="stylesheet" href="/static/style.css">
     <style>
-        /* ===== Similarity Score Bar Styling ===== */
-        .sim-bar {
-            width: 100px;
-            height: 10px;
-            border-radius: 5px;
-            background-color: #ddd;
-            margin: 5px auto;
+        /* ===== Input Validation Styling ===== */
+        .error-msg {
+            color: #e53e3e;
+            font-size: 13px;
+            margin-top: 5px;
+            display: none;
+        }
+        .highlight {
+            border-color: #e53e3e !important;
+            background-color: #fff5f5;
+        }
+        /* ===== General Table Styling ===== */
+        table {
+            border-collapse: collapse;
+            width: 95%;
+            margin: 25px auto;
+            background: #fff;
+            border-radius: 10px;
             overflow: hidden;
+            box-shadow: 0 1px 6px rgba(0, 0, 0, 0.1);
         }
-        .sim-fill {
-            height: 100%;
-            border-radius: 5px;
-            transition: width 0.6s ease;
+        th, td {
+            padding: 10px 14px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
         }
-        .sim-text {
-            font-size: 0.85rem;
-            color: #333;
+        th {
+            background: #edf2f7;
             font-weight: 600;
+        }
+        tr:hover {
+            background-color: #f8fafc;
         }
     </style>
 </head>
@@ -38,17 +52,19 @@
 
     <!-- ===== Main Section ===== -->
     <main>
-        <form method="post" action="/predict" enctype="multipart/form-data" class="input-form">
+        <form id="ipForm" method="post" action="/predict" enctype="multipart/form-data" class="input-form">
             <label>Single IP Address:</label>
-            <input type="text" name="ip_single" placeholder="e.g. 13.71.49.222">
+            <input type="text" id="ip_single" name="ip_single" placeholder="e.g. 13.71.49.222">
+            <p id="ip_error_single" class="error-msg">❌ Invalid IP — each octet must be between 0–255</p>
 
             <label>Multiple IPs (comma-separated):</label>
-            <textarea name="ip_multiple" placeholder="e.g. 13.71.49.222, 61.246.138.73"></textarea>
+            <textarea id="ip_multiple" name="ip_multiple" placeholder="e.g. 13.71.49.222, 61.246.138.73"></textarea>
+            <p id="ip_error_multi" class="error-msg">❌ One or more IPs are invalid — check your entries</p>
 
             <label>Or Upload CSV (with ‘IP’ column):</label>
             <input type="file" name="csv_file" accept=".csv">
 
-            <p class="note">💻 Smart automation connects WHOIS, IPAPI & AI for location accuracy! </p>
+            <p class="note">💻 Smart automation connects WHOIS, IPAPI & AI for location accuracy!</p>
 
             <button type="submit">Locate IP</button>
         </form>
@@ -69,11 +85,9 @@
                             <th>Confidence (%)</th>
                             <th>Error Bound (%)</th>
                             <th>WHOIS ASN</th>
-                            <th>WHOIS City</th>
                             <th>WHOIS Country</th>
                             <th>IPAPI City</th>
-                            <th>Nearest Cities (k-NN Support)</th>
-                            <th>Similarity Score</th>
+                            <th>Match (%)</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -84,25 +98,9 @@
                             <td>{{ r['Confidence (%)'] }}</td>
                             <td>{{ r['Error Bound (%)'] }}</td>
                             <td>{{ r['WHOIS_ASN'] or '-' }}</td>
-                            <td>{{ r['WHOIS_City'] or '-' }}</td>
                             <td>{{ r['WHOIS_Country'] or '-' }}</td>
                             <td>{{ r['IPAPI_City'] or '-' }}</td>
-                            <td>{{ r['Nearest_Cities'] or '-' }}</td>
-                            <td>
-                                {% set score = (r['Similarity_Score'] or '0').replace('%','') %}
-                                {% set score_val = score|float if score|float >= 0 else 0 %}
-                                {% if score_val >= 80 %}
-                                    {% set color = '#4caf50' %}
-                                {% elif score_val >= 50 %}
-                                    {% set color = '#ff9800' %}
-                                {% else %}
-                                    {% set color = '#f44336' %}
-                                {% endif %}
-                                <div class="sim-text">{{ r['Similarity_Score'] or '-' }}</div>
-                                <div class="sim-bar">
-                                    <div class="sim-fill" style="width:{{ score_val }}%; background-color:{{ color }};"></div>
-                                </div>
-                            </td>
+                            <td>{{ r['Match (%)'] or '-' }}</td>
                         </tr>
                     {% endfor %}
                     </tbody>
@@ -116,5 +114,79 @@
     <footer>
         <p>🌐 Team GeoSthira | For support: <a href="mailto:geosthira@gmail.com">geosthira@gmail.com</a></p>
     </footer>
+
+    <!-- ===== IP Validation Script ===== -->
+    <script>
+        const ipSingle = document.getElementById("ip_single");
+        const ipMulti = document.getElementById("ip_multiple");
+        const errSingle = document.getElementById("ip_error_single");
+        const errMulti = document.getElementById("ip_error_multi");
+        const form = document.getElementById("ipForm");
+
+        function isValidIP(ip) {
+            const parts = ip.trim().split(".");
+            if (parts.length !== 4) return false;
+            return parts.every(p => /^\d+$/.test(p) && Number(p) >= 0 && Number(p) <= 255);
+        }
+
+        // Validate single IP on input
+        ipSingle.addEventListener("input", () => {
+            const value = ipSingle.value.trim();
+            if (value && !isValidIP(value)) {
+                ipSingle.classList.add("highlight");
+                errSingle.style.display = "block";
+            } else {
+                ipSingle.classList.remove("highlight");
+                errSingle.style.display = "none";
+            }
+        });
+
+        // Validate multiple IPs on input
+        ipMulti.addEventListener("input", () => {
+            const value = ipMulti.value.trim();
+            if (!value) {
+                ipMulti.classList.remove("highlight");
+                errMulti.style.display = "none";
+                return;
+            }
+            const ips = value.split(",").map(x => x.trim()).filter(x => x);
+            const invalid = ips.some(ip => !isValidIP(ip));
+            if (invalid) {
+                ipMulti.classList.add("highlight");
+                errMulti.style.display = "block";
+            } else {
+                ipMulti.classList.remove("highlight");
+                errMulti.style.display = "none";
+            }
+        });
+
+        // Block submission if invalid
+        form.addEventListener("submit", (e) => {
+            const single = ipSingle.value.trim();
+            const multi = ipMulti.value.trim();
+
+            let invalid = false;
+
+            if (single && !isValidIP(single)) {
+                invalid = true;
+                ipSingle.classList.add("highlight");
+                errSingle.style.display = "block";
+            }
+
+            if (multi) {
+                const ips = multi.split(",").map(x => x.trim()).filter(x => x);
+                if (ips.some(ip => !isValidIP(ip))) {
+                    invalid = true;
+                    ipMulti.classList.add("highlight");
+                    errMulti.style.display = "block";
+                }
+            }
+
+            if (invalid) {
+                e.preventDefault();
+                window.scrollTo({ top: 0, behavior: "smooth" });
+            }
+        });
+    </script>
 </body>
 </html>
