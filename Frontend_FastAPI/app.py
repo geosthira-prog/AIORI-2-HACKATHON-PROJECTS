@@ -51,25 +51,7 @@ label_encoders = joblib.load(encoder_path)
 X_train = pd.read_csv(xtrain_path)
 model_features = X_train.columns.tolist()
 
-# Auto-detect location column
-possible_city_cols = [c for c in X_train.columns if c.lower() in ["city", "location", "city_name", "place"]]
-_train_city_series = X_train[possible_city_cols[0]] if possible_city_cols else None
-
-# Numeric features for distance similarity
-NUMERIC_FEATURES_FOR_DISTANCE = [
-    c for c in ["avg_rtt", "min_rtt", "max_rtt", "rtt_range", "rtt_ratio",
-                "octet_1", "octet_2", "octet_3", "octet_4"]
-    if c in X_train.columns
-]
-
-_distance_mean = X_train[NUMERIC_FEATURES_FOR_DISTANCE].mean()
-_distance_std = X_train[NUMERIC_FEATURES_FOR_DISTANCE].std().replace(0, 1.0)
-_train_numeric_matrix = (X_train[NUMERIC_FEATURES_FOR_DISTANCE] - _distance_mean) / _distance_std
-
-print("✅ Model, Encoders, and X_train loaded successfully!")
-print(f"   WHOIS available: {IPWHOIS_AVAILABLE}")
-print(f"   Numeric distance features: {NUMERIC_FEATURES_FOR_DISTANCE}")
-print(f"   Location column found: {possible_city_cols}")
+print("✅ Model and encoders loaded successfully!")
 
 # ============================================================
 # ✅ PUBLIC DNS LIST
@@ -93,16 +75,24 @@ def is_private_ip(ip_str: str) -> bool:
     except:
         return False
 
+
 def parse_ip(ip_str: str):
+    """Parse IP string and ensure each octet is between 0–255."""
     try:
-        parts = ip_str.split(".")
+        parts = ip_str.strip().split(".")
         if len(parts) != 4:
             return None
-        return [int(p) for p in parts]
-    except:
+        octets = [int(p) for p in parts]
+        if all(0 <= o <= 255 for o in octets):
+            return octets
+        else:
+            return None
+    except ValueError:
         return None
 
+
 def extract_ip_features(ip_str: str):
+    """Extract octet and default RTT features for model input."""
     octets = parse_ip(ip_str)
     if not octets:
         return None
@@ -114,8 +104,8 @@ def extract_ip_features(ip_str: str):
     avg_rtt = X_train["avg_rtt"].mean() if "avg_rtt" in X_train.columns else 0.0
     min_rtt = X_train["min_rtt"].mean() if "min_rtt" in X_train.columns else 0.0
     max_rtt = X_train["max_rtt"].mean() if "max_rtt" in X_train.columns else 1.0
-    rtt_range = X_train["rtt_range"].mean() if "rtt_range" in X_train.columns else (avg_rtt - min_rtt)
-    rtt_ratio = X_train["rtt_ratio"].mean() if "rtt_ratio" in X_train.columns else (avg_rtt / max_rtt if max_rtt != 0 else 0.0)
+    rtt_range = avg_rtt - min_rtt
+    rtt_ratio = avg_rtt / max_rtt if max_rtt != 0 else 0.0
     reverse_dns = X_train["reverse_dns"].mode()[0] if "reverse_dns" in X_train.columns else 0
 
     feature_dict = {
@@ -151,35 +141,21 @@ def extract_ip_features(ip_str: str):
 
     return df_input[model_features]
 
+
 # ============================================================
-# ✅ FIXED WHOIS, IPAPI, SIMILARITY
+# ✅ WHOIS AND IPAPI LOOKUPS
 # ============================================================
 def whois_lookup(ip: str):
-    out = {"asn": "-", "org": "-", "city": "-", "country": "-"}
+    out = {"asn": "-", "org": "-", "country": "-"}
     if not IPWHOIS_AVAILABLE:
         return out
     try:
         obj = IPWhois(ip)
         r = obj.lookup_rdap(depth=1)
-        out["asn"] = r.get("asn") or r.get("asn_registry") or "-"
+        out["asn"] = r.get("asn") or "-"
         net = r.get("network") or {}
         out["org"] = net.get("name") or r.get("asn_description") or "-"
-        out["country"] = (
-            net.get("country")
-            or r.get("asn_country_code")
-            or r.get("country")
-            or "-"
-        )
-
-        # Try city extraction
-        if "objects" in r:
-            for _, val in r["objects"].items():
-                addr = val.get("contact", {}).get("address", [])
-                if addr:
-                    possible_city = addr[0].get("value", "").split("\n")[-1].strip()
-                    if possible_city:
-                        out["city"] = possible_city
-                        break
+        out["country"] = net.get("country") or r.get("country") or "-"
     except Exception as e:
         print(f"WHOIS lookup failed for {ip}: {e}")
     return out
@@ -191,60 +167,33 @@ def ipapi_lookup(ip: str, timeout: float = 3.0):
         resp = requests.get(f"https://ipapi.co/{ip}/json/", headers=headers, timeout=timeout)
         if resp.status_code == 200:
             j = resp.json()
-            city = j.get("city") or j.get("region") or j.get("region_name") or "-"
+            city = j.get("city") or j.get("region") or "-"
             country = j.get("country_name") or j.get("country") or "-"
             return city, country
-        else:
-            print(f"IPAPI returned {resp.status_code} for {ip}")
     except Exception as e:
         print(f"IPAPI lookup failed for {ip}: {e}")
     return "-", "-"
 
 
-def compute_similarity(ip_features: pd.DataFrame, k: int = 5):
-    try:
-        if _train_city_series is None or _train_city_series.empty:
-            return "-", "0%"
-        if ip_features is None or len(NUMERIC_FEATURES_FOR_DISTANCE) == 0:
-            return "-", "0%"
-
-        vec = np.array([
-            ip_features.iloc[0].get(col, _distance_mean[col])
-            for col in NUMERIC_FEATURES_FOR_DISTANCE
-        ], dtype=float)
-        vec_norm = (vec - _distance_mean.values) / _distance_std.values
-
-        diffs = _train_numeric_matrix.values - vec_norm
-        dists = np.sqrt(np.sum(np.square(diffs), axis=1))
-        k = min(k, len(dists))
-        idx = np.argsort(dists)[:k]
-
-        nearest = [(str(_train_city_series.iloc[i]), float(dists[i])) for i in idx]
-
-        # Weighted vote by inverse distance
-        city_scores = {}
-        for city, dist in nearest:
-            weight = 1 / (dist + 1e-6)
-            city_scores[city] = city_scores.get(city, 0) + weight
-
-        top_cities = [f"{c} ({round(score, 2)})" for c, score in sorted(city_scores.items(), key=lambda x: x[1], reverse=True)]
-
-        mean_dist = np.mean([d for _, d in nearest]) if k > 0 else 0.0
-        denom = math.sqrt(len(NUMERIC_FEATURES_FOR_DISTANCE)) or 1.0
-        sim_val = 1 / (1 + mean_dist / denom)
-        sim_percent = f"{round(sim_val * 100, 2)}%"
-
-        return (", ".join(top_cities) if top_cities else "-"), sim_percent
-    except Exception as e:
-        print(f"⚠ Similarity computation failed: {e}")
-        return "-", "0%"
-
 # ============================================================
 # ✅ MAIN PREDICTION LOGIC
 # ============================================================
-def predict_ips(ip_list: List[str], k_neighbors: int = 5):
+def predict_ips(ip_list: List[str]):
     results = []
     for ip in ip_list:
+        if not parse_ip(ip):
+            results.append({
+                "IP": ip,
+                "Predicted_City": "❌ Invalid IP format (0–255 required)",
+                "Confidence (%)": 0.0,
+                "Error Bound (%)": 100.0,
+                "WHOIS_ASN": "-",
+                "WHOIS_Country": "-",
+                "IPAPI_City": "-",
+                "Match (%)": "-"
+            })
+            continue
+
         feats = extract_ip_features(ip)
         if feats is None:
             results.append({
@@ -253,11 +202,8 @@ def predict_ips(ip_list: List[str], k_neighbors: int = 5):
                 "Confidence (%)": 0.0,
                 "Error Bound (%)": 100.0,
                 "WHOIS_ASN": "-",
-                "WHOIS_City": "-",
                 "WHOIS_Country": "-",
                 "IPAPI_City": "-",
-                "Nearest_Cities": "-",
-                "Similarity_Score": "-",
                 "Match (%)": "-"
             })
             continue
@@ -265,15 +211,12 @@ def predict_ips(ip_list: List[str], k_neighbors: int = 5):
         if is_private_ip(ip):
             results.append({
                 "IP": ip,
-                "Predicted_City": "Private IP — Location cannot be found",
+                "Predicted_City": "🔒 Private IP — Location not traceable",
                 "Confidence (%)": 0.0,
                 "Error Bound (%)": 100.0,
                 "WHOIS_ASN": "-",
-                "WHOIS_City": "-",
                 "WHOIS_Country": "-",
                 "IPAPI_City": "-",
-                "Nearest_Cities": "-",
-                "Similarity_Score": "-",
                 "Match (%)": "-"
             })
             continue
@@ -285,11 +228,8 @@ def predict_ips(ip_list: List[str], k_neighbors: int = 5):
                 "Confidence (%)": 0.0,
                 "Error Bound (%)": 100.0,
                 "WHOIS_ASN": "-",
-                "WHOIS_City": "-",
                 "WHOIS_Country": "-",
                 "IPAPI_City": "-",
-                "Nearest_Cities": "-",
-                "Similarity_Score": "-",
                 "Match (%)": "-"
             })
             continue
@@ -301,29 +241,22 @@ def predict_ips(ip_list: List[str], k_neighbors: int = 5):
             pred, conf = "-", 0.0
 
         who = whois_lookup(ip)
-        who_asn = who.get("asn", "-")
-        who_city = who.get("city", "-")
-        who_country = who.get("country", "-")
-        ipapi_city, ipapi_country = ipapi_lookup(ip)
-
-        nearest_cities, sim_score = compute_similarity(feats, k=k_neighbors)
+        ipapi_city, _ = ipapi_lookup(ip)
 
         results.append({
             "IP": ip,
             "Predicted_City": pred or "-",
             "Confidence (%)": round(conf * 100, 2),
             "Error Bound (%)": round((1 - conf) * 100, 2),
-            "WHOIS_ASN": who_asn,
-            "WHOIS_City": who_city,
-            "WHOIS_Country": who_country,
+            "WHOIS_ASN": who.get("asn", "-"),
+            "WHOIS_Country": who.get("country", "-"),
             "IPAPI_City": ipapi_city,
-            "Nearest_Cities": nearest_cities,
-            "Similarity_Score": sim_score,
-            "Match (%)": sim_score
+            "Match (%)": f"{round(conf * 100, 2)}%"
         })
 
     gc.collect()
     return results
+
 
 # ============================================================
 # ✅ CONFIDENCE PLOT
@@ -351,6 +284,7 @@ def plot_confidence(results):
     gc.collect()
     return img_base64
 
+
 # ============================================================
 # ✅ ROUTES
 # ============================================================
@@ -363,8 +297,7 @@ def home(request: Request):
 async def predict(request: Request,
                   ip_single: str = Form(""),
                   ip_multiple: str = Form(""),
-                  csv_file: UploadFile = File(None),
-                  k_neighbors: int = Form(3)):
+                  csv_file: UploadFile = File(None)):
     ip_list: List[str] = []
 
     if ip_single and ip_single.strip():
@@ -386,7 +319,7 @@ async def predict(request: Request,
         return templates.TemplateResponse("home.html", {"request": request, "results": None, "plot": None, "error": "Please enter or upload IPs."})
 
     try:
-        results = predict_ips(ip_list, k_neighbors=k_neighbors)
+        results = predict_ips(ip_list)
         plot_img = plot_confidence(results)
     except Exception as e:
         return templates.TemplateResponse("home.html", {"request": request, "results": None, "plot": None, "error": f"Prediction failed: {str(e)}"})
