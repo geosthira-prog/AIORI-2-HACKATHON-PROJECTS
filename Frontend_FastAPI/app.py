@@ -152,7 +152,7 @@ def extract_ip_features(ip_str: str):
     return df_input[model_features]
 
 # ============================================================
-# ✅ WHOIS, IPAPI, SIMILARITY
+# ✅ FIXED WHOIS, IPAPI, SIMILARITY
 # ============================================================
 def whois_lookup(ip: str):
     out = {"asn": "-", "org": "-", "city": "-", "country": "-"}
@@ -163,72 +163,81 @@ def whois_lookup(ip: str):
         r = obj.lookup_rdap(depth=1)
         out["asn"] = r.get("asn") or r.get("asn_registry") or "-"
         net = r.get("network") or {}
-        out["org"] = net.get("name") or "-"
-        out["country"] = net.get("country") or r.get("country") or "-"
-        out["city"] = net.get("city") or "-"
-    except Exception:
-        pass
+        out["org"] = net.get("name") or r.get("asn_description") or "-"
+        out["country"] = (
+            net.get("country")
+            or r.get("asn_country_code")
+            or r.get("country")
+            or "-"
+        )
+
+        # Try city extraction
+        if "objects" in r:
+            for _, val in r["objects"].items():
+                addr = val.get("contact", {}).get("address", [])
+                if addr:
+                    possible_city = addr[0].get("value", "").split("\n")[-1].strip()
+                    if possible_city:
+                        out["city"] = possible_city
+                        break
+    except Exception as e:
+        print(f"WHOIS lookup failed for {ip}: {e}")
     return out
 
-def ipapi_lookup(ip: str, timeout: float = 2.0):
+
+def ipapi_lookup(ip: str, timeout: float = 3.0):
+    headers = {"User-Agent": "Mozilla/5.0"}
     try:
-        resp = requests.get(f"https://ipapi.co/{ip}/json/", timeout=timeout)
+        resp = requests.get(f"https://ipapi.co/{ip}/json/", headers=headers, timeout=timeout)
         if resp.status_code == 200:
             j = resp.json()
-            city = j.get("city") or j.get("region") or "-"
+            city = j.get("city") or j.get("region") or j.get("region_name") or "-"
             country = j.get("country_name") or j.get("country") or "-"
             return city, country
-    except Exception:
-        pass
+        else:
+            print(f"IPAPI returned {resp.status_code} for {ip}")
+    except Exception as e:
+        print(f"IPAPI lookup failed for {ip}: {e}")
     return "-", "-"
 
-# ============================================================
-# ✅ IMPROVED SIMILARITY COMPUTATION
-# ============================================================
+
 def compute_similarity(ip_features: pd.DataFrame, k: int = 5):
     try:
         if _train_city_series is None or _train_city_series.empty:
-            return "-", "-"
+            return "-", "0%"
         if ip_features is None or len(NUMERIC_FEATURES_FOR_DISTANCE) == 0:
-            return "-", "-"
+            return "-", "0%"
 
-        vec = []
-        for col in NUMERIC_FEATURES_FOR_DISTANCE:
-            val = ip_features.iloc[0].get(col, _distance_mean[col])
-            if pd.isna(val):
-                val = _distance_mean[col]
-            vec.append(float(val))
-
-        vec = np.array(vec, dtype=float)
+        vec = np.array([
+            ip_features.iloc[0].get(col, _distance_mean[col])
+            for col in NUMERIC_FEATURES_FOR_DISTANCE
+        ], dtype=float)
         vec_norm = (vec - _distance_mean.values) / _distance_std.values
 
         diffs = _train_numeric_matrix.values - vec_norm
-        dists = np.sqrt(np.sum(diffs ** 2, axis=1))
+        dists = np.sqrt(np.sum(np.square(diffs), axis=1))
         k = min(k, len(dists))
         idx = np.argsort(dists)[:k]
 
         nearest = [(str(_train_city_series.iloc[i]), float(dists[i])) for i in idx]
 
-        city_counts = {}
-        for c, d in nearest:
-            c = str(c)
-            city_counts[c] = city_counts.get(c, 0) + 1
+        # Weighted vote by inverse distance
+        city_scores = {}
+        for city, dist in nearest:
+            weight = 1 / (dist + 1e-6)
+            city_scores[city] = city_scores.get(city, 0) + weight
 
-        top_cities = [f"{c} ({cnt})" for c, cnt in sorted(city_counts.items(), key=lambda x: x[1], reverse=True)]
+        top_cities = [f"{c} ({round(score, 2)})" for c, score in sorted(city_scores.items(), key=lambda x: x[1], reverse=True)]
 
-        mean_dist = float(np.mean([d for _, d in nearest])) if k > 0 else None
-        if mean_dist is not None and not np.isnan(mean_dist):
-            denom = math.sqrt(len(NUMERIC_FEATURES_FOR_DISTANCE)) or 1.0
-            sim_val = 1.0 / (1.0 + mean_dist / denom)
-            sim_percent = f"{round(sim_val * 100, 2)}%"
-        else:
-            sim_percent = "-"
+        mean_dist = np.mean([d for _, d in nearest]) if k > 0 else 0.0
+        denom = math.sqrt(len(NUMERIC_FEATURES_FOR_DISTANCE)) or 1.0
+        sim_val = 1 / (1 + mean_dist / denom)
+        sim_percent = f"{round(sim_val * 100, 2)}%"
 
         return (", ".join(top_cities) if top_cities else "-"), sim_percent
-
     except Exception as e:
         print(f"⚠ Similarity computation failed: {e}")
-        return "-", "-"
+        return "-", "0%"
 
 # ============================================================
 # ✅ MAIN PREDICTION LOGIC
@@ -310,7 +319,7 @@ def predict_ips(ip_list: List[str], k_neighbors: int = 5):
             "IPAPI_City": ipapi_city,
             "Nearest_Cities": nearest_cities,
             "Similarity_Score": sim_score,
-            "Match (%)": sim_score  # display same similarity as percentage column
+            "Match (%)": sim_score
         })
 
     gc.collect()
@@ -348,6 +357,7 @@ def plot_confidence(results):
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request):
     return templates.TemplateResponse("home.html", {"request": request, "results": None, "plot": None, "error": None})
+
 
 @app.post("/predict", response_class=HTMLResponse)
 async def predict(request: Request,
